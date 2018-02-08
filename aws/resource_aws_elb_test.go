@@ -206,7 +206,7 @@ func TestAccAWSELB_generatedName(t *testing.T) {
 		CheckDestroy:  testAccCheckAWSELBDestroy,
 		Steps: []resource.TestStep{
 			{
-				Config: testAccAWSELBGeneratedName,
+				Config: testAccAWSELB_generatedName,
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheckAWSELBExists("aws_elb.foo", &conf),
 					resource.TestMatchResourceAttr(
@@ -273,6 +273,108 @@ func TestAccAWSELB_availabilityZones(t *testing.T) {
 						"aws_elb.bar", "availability_zones.2487133097", "us-west-2a"),
 					resource.TestCheckResourceAttr(
 						"aws_elb.bar", "availability_zones.221770259", "us-west-2b"),
+				),
+			},
+		},
+	})
+}
+
+func TestAccAWSELB_listeners(t *testing.T) {
+	var conf elb.LoadBalancerDescription
+	resourceName := "aws_elb.foo"
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:      func() { testAccPreCheck(t) },
+		IDRefreshName: "aws_elb.foo",
+		Providers:     testAccProviders,
+		CheckDestroy:  testAccCheckAWSELBDestroy,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccAWSELB_generatedName,
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckAWSELBExists(resourceName, &conf),
+					resource.TestCheckResourceAttr(resourceName, "listener.#", "1"),
+					resource.TestCheckResourceAttr(resourceName, "listener.206423021.instance_port", "8000"),
+					resource.TestCheckResourceAttr(resourceName, "listener.206423021.instance_protocol", "http"),
+					resource.TestCheckResourceAttr(resourceName, "listener.206423021.lb_port", "80"),
+					resource.TestCheckResourceAttr(resourceName, "listener.206423021.lb_protocol", "http"),
+				),
+			},
+			{
+				Config: testAccAWSELB_generatedNameMultipleListeners,
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckAWSELBExists(resourceName, &conf),
+					resource.TestCheckResourceAttr(resourceName, "listener.#", "2"),
+					resource.TestCheckResourceAttr(resourceName, "listener.206423021.instance_port", "8000"),
+					resource.TestCheckResourceAttr(resourceName, "listener.206423021.instance_protocol", "http"),
+					resource.TestCheckResourceAttr(resourceName, "listener.206423021.lb_port", "80"),
+					resource.TestCheckResourceAttr(resourceName, "listener.206423021.lb_protocol", "http"),
+					resource.TestCheckResourceAttr(resourceName, "listener.829854800.instance_port", "22"),
+					resource.TestCheckResourceAttr(resourceName, "listener.829854800.instance_protocol", "tcp"),
+					resource.TestCheckResourceAttr(resourceName, "listener.829854800.lb_port", "22"),
+					resource.TestCheckResourceAttr(resourceName, "listener.829854800.lb_protocol", "tcp"),
+				),
+			},
+			{
+				Config: testAccAWSELB_generatedName,
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckAWSELBExists(resourceName, &conf),
+					resource.TestCheckResourceAttr(resourceName, "listener.#", "1"),
+					resource.TestCheckResourceAttr(resourceName, "listener.206423021.instance_port", "8000"),
+					resource.TestCheckResourceAttr(resourceName, "listener.206423021.instance_protocol", "http"),
+					resource.TestCheckResourceAttr(resourceName, "listener.206423021.lb_port", "80"),
+					resource.TestCheckResourceAttr(resourceName, "listener.206423021.lb_protocol", "http"),
+				),
+			},
+			{
+				PreConfig: func() {
+					// Simulate out of band listener addition
+					conn := testAccProvider.Meta().(*AWSClient).elbconn
+					input := &elb.CreateLoadBalancerListenersInput{
+						LoadBalancerName: conf.LoadBalancerName,
+						Listeners: []*elb.Listener{
+							&elb.Listener{
+								InstancePort:     aws.Int64(int64(22)),
+								InstanceProtocol: aws.String("tcp"),
+								LoadBalancerPort: aws.Int64(int64(22)),
+								Protocol:         aws.String("tcp"),
+							},
+						},
+					}
+					if _, err := conn.CreateLoadBalancerListeners(input); err != nil {
+						t.Fatalf("Error creating listener: %s", err)
+					}
+				},
+				Config: testAccAWSELB_generatedName,
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckAWSELBExists(resourceName, &conf),
+					resource.TestCheckResourceAttr(resourceName, "listener.#", "1"),
+					resource.TestCheckResourceAttr(resourceName, "listener.206423021.instance_port", "8000"),
+					resource.TestCheckResourceAttr(resourceName, "listener.206423021.instance_protocol", "http"),
+					resource.TestCheckResourceAttr(resourceName, "listener.206423021.lb_port", "80"),
+					resource.TestCheckResourceAttr(resourceName, "listener.206423021.lb_protocol", "http"),
+				),
+			},
+			{
+				PreConfig: func() {
+					// Simulate out of band listener removal
+					conn := testAccProvider.Meta().(*AWSClient).elbconn
+					input := &elb.DeleteLoadBalancerListenersInput{
+						LoadBalancerName:  conf.LoadBalancerName,
+						LoadBalancerPorts: []*int64{aws.Int64(int64(80))},
+					}
+					if _, err := conn.DeleteLoadBalancerListeners(input); err != nil {
+						t.Fatalf("Error deleting listener: %s", err)
+					}
+				},
+				Config: testAccAWSELB_generatedName,
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckAWSELBExists(resourceName, &conf),
+					resource.TestCheckResourceAttr(resourceName, "listener.#", "1"),
+					resource.TestCheckResourceAttr(resourceName, "listener.206423021.instance_port", "8000"),
+					resource.TestCheckResourceAttr(resourceName, "listener.206423021.instance_protocol", "http"),
+					resource.TestCheckResourceAttr(resourceName, "listener.206423021.lb_port", "80"),
+					resource.TestCheckResourceAttr(resourceName, "listener.206423021.lb_protocol", "http"),
 				),
 			},
 		},
@@ -1206,7 +1308,7 @@ resource "aws_elb" "test" {
 }
 `
 
-const testAccAWSELBGeneratedName = `
+const testAccAWSELB_generatedName = `
 resource "aws_elb" "foo" {
   availability_zones = ["us-west-2a", "us-west-2b", "us-west-2c"]
 
@@ -1215,6 +1317,26 @@ resource "aws_elb" "foo" {
     instance_protocol = "http"
     lb_port = 80
     lb_protocol = "http"
+  }
+}
+`
+
+const testAccAWSELB_generatedNameMultipleListeners = `
+resource "aws_elb" "foo" {
+  availability_zones = ["us-west-2a", "us-west-2b", "us-west-2c"]
+
+  listener {
+    instance_port = 8000
+    instance_protocol = "http"
+    lb_port = 80
+    lb_protocol = "http"
+  }
+
+  listener {
+    instance_port = 22
+    instance_protocol = "tcp"
+    lb_port = 22
+    lb_protocol = "tcp"
   }
 }
 `
