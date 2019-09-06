@@ -12,7 +12,6 @@ import (
 	"github.com/hashicorp/terraform/helper/schema"
 
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/rds"
 )
 
@@ -27,11 +26,11 @@ func resourceAwsDbParameterGroup() *schema.Resource {
 		},
 
 		Schema: map[string]*schema.Schema{
-			"arn": &schema.Schema{
+			"arn": {
 				Type:     schema.TypeString,
 				Computed: true,
 			},
-			"name": &schema.Schema{
+			"name": {
 				Type:          schema.TypeString,
 				Optional:      true,
 				Computed:      true,
@@ -39,39 +38,40 @@ func resourceAwsDbParameterGroup() *schema.Resource {
 				ConflictsWith: []string{"name_prefix"},
 				ValidateFunc:  validateDbParamGroupName,
 			},
-			"name_prefix": &schema.Schema{
-				Type:         schema.TypeString,
-				Optional:     true,
-				Computed:     true,
-				ForceNew:     true,
-				ValidateFunc: validateDbParamGroupNamePrefix,
+			"name_prefix": {
+				Type:          schema.TypeString,
+				Optional:      true,
+				Computed:      true,
+				ForceNew:      true,
+				ConflictsWith: []string{"name"},
+				ValidateFunc:  validateDbParamGroupNamePrefix,
 			},
-			"family": &schema.Schema{
+			"family": {
 				Type:     schema.TypeString,
 				Required: true,
 				ForceNew: true,
 			},
-			"description": &schema.Schema{
+			"description": {
 				Type:     schema.TypeString,
 				Optional: true,
 				ForceNew: true,
 				Default:  "Managed by Terraform",
 			},
-			"parameter": &schema.Schema{
+			"parameter": {
 				Type:     schema.TypeSet,
 				Optional: true,
 				ForceNew: false,
 				Elem: &schema.Resource{
 					Schema: map[string]*schema.Schema{
-						"name": &schema.Schema{
+						"name": {
 							Type:     schema.TypeString,
 							Required: true,
 						},
-						"value": &schema.Schema{
+						"value": {
 							Type:     schema.TypeString,
 							Required: true,
 						},
-						"apply_method": &schema.Schema{
+						"apply_method": {
 							Type:     schema.TypeString,
 							Optional: true,
 							Default:  "immediate",
@@ -108,7 +108,7 @@ func resourceAwsDbParameterGroupCreate(d *schema.ResourceData, meta interface{})
 	}
 
 	log.Printf("[DEBUG] Create DB Parameter Group: %#v", createOpts)
-	_, err := rdsconn.CreateDBParameterGroup(&createOpts)
+	resp, err := rdsconn.CreateDBParameterGroup(&createOpts)
 	if err != nil {
 		return fmt.Errorf("Error creating DB Parameter Group: %s", err)
 	}
@@ -119,7 +119,8 @@ func resourceAwsDbParameterGroupCreate(d *schema.ResourceData, meta interface{})
 	d.SetPartial("description")
 	d.Partial(false)
 
-	d.SetId(*createOpts.DBParameterGroupName)
+	d.SetId(aws.StringValue(resp.DBParameterGroup.DBParameterGroupName))
+	d.Set("arn", resp.DBParameterGroup.DBParameterGroupArn)
 	log.Printf("[INFO] DB Parameter Group ID: %s", d.Id())
 
 	return resourceAwsDbParameterGroupUpdate(d, meta)
@@ -226,30 +227,22 @@ func resourceAwsDbParameterGroupRead(d *schema.ResourceData, meta interface{}) e
 		return fmt.Errorf("error setting 'parameter' in state: %#v", err)
 	}
 
-	paramGroup := describeResp.DBParameterGroups[0]
-	arn, err := buildRDSPGARN(d.Id(), meta.(*AWSClient).partition, meta.(*AWSClient).accountid, meta.(*AWSClient).region)
+	arn := aws.StringValue(describeResp.DBParameterGroups[0].DBParameterGroupArn)
+	d.Set("arn", arn)
+
+	resp, err := rdsconn.ListTagsForResource(&rds.ListTagsForResourceInput{
+		ResourceName: aws.String(arn),
+	})
+
 	if err != nil {
-		name := "<empty>"
-		if paramGroup.DBParameterGroupName != nil && *paramGroup.DBParameterGroupName != "" {
-			name = *paramGroup.DBParameterGroupName
-		}
-		log.Printf("[DEBUG] Error building ARN for DB Parameter Group, not setting Tags for Param Group %s", name)
-	} else {
-		d.Set("arn", arn)
-		resp, err := rdsconn.ListTagsForResource(&rds.ListTagsForResourceInput{
-			ResourceName: aws.String(arn),
-		})
-
-		if err != nil {
-			log.Printf("[DEBUG] Error retrieving tags for ARN: %s", arn)
-		}
-
-		var dt []*rds.Tag
-		if len(resp.TagList) > 0 {
-			dt = resp.TagList
-		}
-		d.Set("tags", tagsToMapRDS(dt))
+		log.Printf("[DEBUG] Error retrieving tags for ARN: %s", arn)
 	}
+
+	var dt []*rds.Tag
+	if len(resp.TagList) > 0 {
+		dt = resp.TagList
+	}
+	d.Set("tags", tagsToMapRDS(dt))
 
 	return nil
 }
@@ -282,7 +275,7 @@ func resourceAwsDbParameterGroupUpdate(d *schema.ResourceData, meta interface{})
 			// we've got them all.
 			maxParams := 20
 			for parameters != nil {
-				paramsToModify := make([]*rds.Parameter, 0)
+				var paramsToModify []*rds.Parameter
 				if len(parameters) <= maxParams {
 					paramsToModify, parameters = parameters[:], nil
 				} else {
@@ -303,12 +296,10 @@ func resourceAwsDbParameterGroupUpdate(d *schema.ResourceData, meta interface{})
 		}
 	}
 
-	if arn, err := buildRDSPGARN(d.Id(), meta.(*AWSClient).partition, meta.(*AWSClient).accountid, meta.(*AWSClient).region); err == nil {
-		if err := setTagsRDS(rdsconn, d, arn); err != nil {
-			return err
-		} else {
-			d.SetPartial("tags")
-		}
+	if err := setTagsRDS(rdsconn, d, d.Get("arn").(string)); err != nil {
+		return err
+	} else {
+		d.SetPartial("tags")
 	}
 
 	d.Partial(false)
@@ -318,23 +309,26 @@ func resourceAwsDbParameterGroupUpdate(d *schema.ResourceData, meta interface{})
 
 func resourceAwsDbParameterGroupDelete(d *schema.ResourceData, meta interface{}) error {
 	conn := meta.(*AWSClient).rdsconn
-	return resource.Retry(3*time.Minute, func() *resource.RetryError {
-		deleteOpts := rds.DeleteDBParameterGroupInput{
-			DBParameterGroupName: aws.String(d.Id()),
-		}
-
+	deleteOpts := rds.DeleteDBParameterGroupInput{
+		DBParameterGroupName: aws.String(d.Id()),
+	}
+	err := resource.Retry(3*time.Minute, func() *resource.RetryError {
 		_, err := conn.DeleteDBParameterGroup(&deleteOpts)
 		if err != nil {
-			awsErr, ok := err.(awserr.Error)
-			if ok && awsErr.Code() == "DBParameterGroupNotFoundFault" {
+			if isAWSErr(err, "DBParameterGroupNotFoundFault", "") || isAWSErr(err, "InvalidDBParameterGroupState", "") {
 				return resource.RetryableError(err)
 			}
-			if ok && awsErr.Code() == "InvalidDBParameterGroupState" {
-				return resource.RetryableError(err)
-			}
+			return resource.NonRetryableError(err)
 		}
-		return resource.NonRetryableError(err)
+		return nil
 	})
+	if isResourceTimeoutError(err) {
+		_, err = conn.DeleteDBParameterGroup(&deleteOpts)
+	}
+	if err != nil {
+		return fmt.Errorf("Error deleting DB parameter group: %s", err)
+	}
+	return nil
 }
 
 func resourceAwsDbParameterHash(v interface{}) int {
@@ -345,16 +339,4 @@ func resourceAwsDbParameterHash(v interface{}) int {
 	buf.WriteString(fmt.Sprintf("%s-", strings.ToLower(m["value"].(string))))
 
 	return hashcode.String(buf.String())
-}
-
-func buildRDSPGARN(identifier, partition, accountid, region string) (string, error) {
-	if partition == "" {
-		return "", fmt.Errorf("Unable to construct RDS ARN because of missing AWS partition")
-	}
-	if accountid == "" {
-		return "", fmt.Errorf("Unable to construct RDS ARN because of missing AWS Account ID")
-	}
-	arn := fmt.Sprintf("arn:%s:rds:%s:%s:pg:%s", partition, region, accountid, identifier)
-	return arn, nil
-
 }

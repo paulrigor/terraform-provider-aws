@@ -5,7 +5,7 @@ sidebar_current: docs-aws-resource-guardduty-threatintelset
 description: Provides a resource to manage a GuardDuty ThreatIntelSet
 ---
 
-# aws_guardduty_threatintelset
+# Resource: aws_guardduty_threatintelset
 
 Provides a resource to manage a GuardDuty ThreatIntelSet.
 
@@ -50,7 +50,7 @@ The following arguments are supported:
 
 ## Attributes Reference
 
-The following additional attributes are exported:
+In addition to all arguments above, the following attributes are exported:
 
 * `id` - The ID of the GuardDuty ThreatIntelSet and the detector ID. Format: `<DetectorID>:<ThreatIntelSetID>`
 

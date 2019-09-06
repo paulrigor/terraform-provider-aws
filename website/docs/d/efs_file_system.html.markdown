@@ -1,6 +1,6 @@
 ---
 layout: "aws"
-page_title: "AWS: efs_file_system"
+page_title: "AWS: aws_efs_file_system"
 sidebar_current: "docs-aws-datasource-efs-file-system"
 description: |-
   Provides an Elastic File System (EFS) data source.
@@ -14,7 +14,7 @@ Provides information about an Elastic File System (EFS).
 
 ```hcl
 variable "file_system_id" {
-  type = "string"
+  type    = "string"
   default = ""
 }
 
@@ -32,8 +32,9 @@ The following arguments are supported:
 
 ## Attributes Reference
 
-The following attributes are exported:
+In addition to all arguments above, the following attributes are exported:
 
+* `arn` - Amazon Resource Name of the file system.
 * `performance_mode` - The PerformanceMode of the file system.
 * `tags` - The list of tags assigned to the file system.
 * `encrypted` - Whether EFS is encrypted.

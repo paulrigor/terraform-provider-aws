@@ -2,16 +2,16 @@ package aws
 
 import (
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"regexp"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/hashicorp/terraform/helper/acctest"
 	"github.com/hashicorp/terraform/helper/resource"
 	"github.com/hashicorp/terraform/terraform"
-	homedir "github.com/mitchellh/go-homedir"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/sns"
@@ -27,44 +27,42 @@ import (
 **/
 
 type testAccAwsSnsPlatformApplicationPlatform struct {
-	Name           string
-	Credential     string
-	CredentialHash string
-	Principal      string
-	PrincipalHash  string
+	Name       string
+	Credential string
+	Principal  string
 }
 
 func testAccAwsSnsPlatformApplicationPlatformFromEnv(t *testing.T) []*testAccAwsSnsPlatformApplicationPlatform {
 	platforms := make([]*testAccAwsSnsPlatformApplicationPlatform, 0, 2)
 
-	if os.Getenv("APNS_SANDBOX_CREDENTIAL_PATH") != "" {
-		if os.Getenv("APNS_SANDBOX_PRINCIPAL_PATH") == "" {
-			t.Fatalf("APNS_SANDBOX_CREDENTIAL_PATH set but missing APNS_SANDBOX_PRINCIPAL_PATH")
-		}
-		credentialHash, err := testAccHashSumPath(os.Getenv("APNS_SANDBOX_CREDENTIAL_PATH"))
-		if err != nil {
-			t.Fatal(err)
-		}
-		principalHash, err := testAccHashSumPath(os.Getenv("APNS_SANDBOX_PRINCIPAL_PATH"))
-		if err != nil {
-			t.Fatal(err)
+	if os.Getenv("APNS_SANDBOX_CREDENTIAL") != "" {
+		if os.Getenv("APNS_SANDBOX_PRINCIPAL") == "" {
+			t.Fatalf("APNS_SANDBOX_CREDENTIAL set but missing APNS_SANDBOX_PRINCIPAL")
 		}
 
 		platform := &testAccAwsSnsPlatformApplicationPlatform{
-			Name:           "APNS_SANDBOX",
-			Credential:     fmt.Sprintf("${file(pathexpand(%q))}", os.Getenv("APNS_SANDBOX_CREDENTIAL_PATH")),
-			CredentialHash: credentialHash,
-			Principal:      fmt.Sprintf("${file(pathexpand(%q))}", os.Getenv("APNS_SANDBOX_PRINCIPAL_PATH")),
-			PrincipalHash:  principalHash,
+			Name:       "APNS_SANDBOX",
+			Credential: fmt.Sprintf("<<EOF\n%s\nEOF\n", strings.TrimSpace(os.Getenv("APNS_SANDBOX_CREDENTIAL"))),
+			Principal:  fmt.Sprintf("<<EOF\n%s\nEOF\n", strings.TrimSpace(os.Getenv("APNS_SANDBOX_PRINCIPAL"))),
+		}
+		platforms = append(platforms, platform)
+	} else if os.Getenv("APNS_SANDBOX_CREDENTIAL_PATH") != "" {
+		if os.Getenv("APNS_SANDBOX_PRINCIPAL_PATH") == "" {
+			t.Fatalf("APNS_SANDBOX_CREDENTIAL_PATH set but missing APNS_SANDBOX_PRINCIPAL_PATH")
+		}
+
+		platform := &testAccAwsSnsPlatformApplicationPlatform{
+			Name:       "APNS_SANDBOX",
+			Credential: strconv.Quote(fmt.Sprintf("${file(pathexpand(%q))}", os.Getenv("APNS_SANDBOX_CREDENTIAL_PATH"))),
+			Principal:  strconv.Quote(fmt.Sprintf("${file(pathexpand(%q))}", os.Getenv("APNS_SANDBOX_PRINCIPAL_PATH"))),
 		}
 		platforms = append(platforms, platform)
 	}
 
 	if os.Getenv("GCM_API_KEY") != "" {
 		platform := &testAccAwsSnsPlatformApplicationPlatform{
-			Name:           "GCM",
-			Credential:     os.Getenv("GCM_API_KEY"),
-			CredentialHash: hashSum(os.Getenv("GCM_API_KEY")),
+			Name:       "GCM",
+			Credential: strconv.Quote(os.Getenv("GCM_API_KEY")),
 		}
 		platforms = append(platforms, platform)
 	}
@@ -73,18 +71,6 @@ func testAccAwsSnsPlatformApplicationPlatformFromEnv(t *testing.T) []*testAccAws
 		t.Skipf("no SNS Platform Application environment variables found")
 	}
 	return platforms
-}
-
-func testAccHashSumPath(path string) (string, error) {
-	path, err := homedir.Expand(path)
-	if err != nil {
-		return "", err
-	}
-	data, err := ioutil.ReadFile(path)
-	if err != nil {
-		return "", err
-	}
-	return hashSum(string(data)), nil
 }
 
 func TestDecodeResourceAwsSnsPlatformApplicationID(t *testing.T) {
@@ -160,7 +146,7 @@ func TestDecodeResourceAwsSnsPlatformApplicationID(t *testing.T) {
 	}
 }
 
-func TestAccAwsSnsPlatformApplication_basic(t *testing.T) {
+func TestAccAWSSnsPlatformApplication_basic(t *testing.T) {
 	platforms := testAccAwsSnsPlatformApplicationPlatformFromEnv(t)
 	resourceName := "aws_sns_platform_application.test"
 
@@ -168,11 +154,11 @@ func TestAccAwsSnsPlatformApplication_basic(t *testing.T) {
 		name := fmt.Sprintf("tf-acc-%d", acctest.RandInt())
 		platformPrincipalCheck := resource.TestCheckNoResourceAttr(resourceName, "platform_principal")
 		if platform.Principal != "" {
-			platformPrincipalCheck = resource.TestCheckResourceAttr(resourceName, "platform_principal", platform.PrincipalHash)
+			platformPrincipalCheck = resource.TestCheckResourceAttrSet(resourceName, "platform_principal")
 		}
 
 		t.Run(platform.Name, func(*testing.T) {
-			resource.Test(t, resource.TestCase{
+			resource.ParallelTest(t, resource.TestCase{
 				PreCheck:     func() { testAccPreCheck(t) },
 				Providers:    testAccProviders,
 				CheckDestroy: testAccCheckAWSSNSPlatformApplicationDestroy,
@@ -180,16 +166,16 @@ func TestAccAwsSnsPlatformApplication_basic(t *testing.T) {
 					{
 						Config: testAccAwsSnsPlatformApplicationConfig_basic(name, &testAccAwsSnsPlatformApplicationPlatform{
 							Name:       "APNS",
-							Credential: "NOTEMPTY",
-							Principal:  "",
+							Credential: strconv.Quote("NOTEMPTY"),
+							Principal:  strconv.Quote(""),
 						}),
 						ExpectError: regexp.MustCompile(`platform_principal is required when platform =`),
 					},
 					{
 						Config: testAccAwsSnsPlatformApplicationConfig_basic(name, &testAccAwsSnsPlatformApplicationPlatform{
 							Name:       "APNS_SANDBOX",
-							Credential: "NOTEMPTY",
-							Principal:  "",
+							Credential: strconv.Quote("NOTEMPTY"),
+							Principal:  strconv.Quote(""),
 						}),
 						ExpectError: regexp.MustCompile(`platform_principal is required when platform =`),
 					},
@@ -200,7 +186,7 @@ func TestAccAwsSnsPlatformApplication_basic(t *testing.T) {
 							resource.TestMatchResourceAttr(resourceName, "arn", regexp.MustCompile(fmt.Sprintf("^arn:[^:]+:sns:[^:]+:[^:]+:app/%s/%s$", platform.Name, name))),
 							resource.TestCheckResourceAttr(resourceName, "name", name),
 							resource.TestCheckResourceAttr(resourceName, "platform", platform.Name),
-							resource.TestCheckResourceAttr(resourceName, "platform_credential", platform.CredentialHash),
+							resource.TestCheckResourceAttrSet(resourceName, "platform_credential"),
 							platformPrincipalCheck,
 						),
 					},
@@ -216,7 +202,7 @@ func TestAccAwsSnsPlatformApplication_basic(t *testing.T) {
 	}
 }
 
-func TestAccAwsSnsPlatformApplication_basicAttributes(t *testing.T) {
+func TestAccAWSSnsPlatformApplication_basicAttributes(t *testing.T) {
 	platforms := testAccAwsSnsPlatformApplicationPlatformFromEnv(t)
 	resourceName := "aws_sns_platform_application.test"
 
@@ -238,7 +224,7 @@ func TestAccAwsSnsPlatformApplication_basicAttributes(t *testing.T) {
 				t.Run(fmt.Sprintf("%s/%s", platform.Name, tc.AttributeKey), func(*testing.T) {
 					name := fmt.Sprintf("tf-acc-%d", acctest.RandInt())
 
-					resource.Test(t, resource.TestCase{
+					resource.ParallelTest(t, resource.TestCase{
 						PreCheck:     func() { testAccPreCheck(t) },
 						Providers:    testAccProviders,
 						CheckDestroy: testAccCheckAWSSNSPlatformApplicationDestroy,
@@ -271,7 +257,7 @@ func TestAccAwsSnsPlatformApplication_basicAttributes(t *testing.T) {
 	}
 }
 
-func TestAccAwsSnsPlatformApplication_iamRoleAttributes(t *testing.T) {
+func TestAccAWSSnsPlatformApplication_iamRoleAttributes(t *testing.T) {
 	platforms := testAccAwsSnsPlatformApplicationPlatformFromEnv(t)
 	resourceName := "aws_sns_platform_application.test"
 
@@ -288,7 +274,7 @@ func TestAccAwsSnsPlatformApplication_iamRoleAttributes(t *testing.T) {
 					iamRoleName2 := fmt.Sprintf("tf-acc-%d", acctest.RandInt())
 					name := fmt.Sprintf("tf-acc-%d", acctest.RandInt())
 
-					resource.Test(t, resource.TestCase{
+					resource.ParallelTest(t, resource.TestCase{
 						PreCheck:     func() { testAccPreCheck(t) },
 						Providers:    testAccProviders,
 						CheckDestroy: testAccCheckAWSSNSPlatformApplicationDestroy,
@@ -321,7 +307,7 @@ func TestAccAwsSnsPlatformApplication_iamRoleAttributes(t *testing.T) {
 	}
 }
 
-func TestAccAwsSnsPlatformApplication_snsTopicAttributes(t *testing.T) {
+func TestAccAWSSnsPlatformApplication_snsTopicAttributes(t *testing.T) {
 	platforms := testAccAwsSnsPlatformApplicationPlatformFromEnv(t)
 	resourceName := "aws_sns_platform_application.test"
 
@@ -340,7 +326,7 @@ func TestAccAwsSnsPlatformApplication_snsTopicAttributes(t *testing.T) {
 					snsTopicName2 := fmt.Sprintf("tf-acc-%d", acctest.RandInt())
 					name := fmt.Sprintf("tf-acc-%d", acctest.RandInt())
 
-					resource.Test(t, resource.TestCase{
+					resource.ParallelTest(t, resource.TestCase{
 						PreCheck:     func() { testAccPreCheck(t) },
 						Providers:    testAccProviders,
 						CheckDestroy: testAccCheckAWSSNSPlatformApplicationDestroy,
@@ -392,11 +378,8 @@ func testAccCheckAwsSnsPlatformApplicationExists(name string) resource.TestCheck
 
 		log.Printf("[DEBUG] Reading SNS Platform Application attributes: %s", input)
 		_, err := conn.GetPlatformApplicationAttributes(input)
-		if err != nil {
-			return err
-		}
 
-		return nil
+		return err
 	}
 }
 
@@ -430,7 +413,7 @@ func testAccAwsSnsPlatformApplicationConfig_basic(name string, platform *testAcc
 resource "aws_sns_platform_application" "test" {
   name                = "%s"
   platform            = "%s"
-  platform_credential = "%s"
+  platform_credential = %s
 }
 `, name, platform.Name, platform.Credential)
 	}
@@ -438,8 +421,8 @@ resource "aws_sns_platform_application" "test" {
 resource "aws_sns_platform_application" "test" {
   name                = "%s"
   platform            = "%s"
-  platform_credential = "%s"
-  platform_principal  = "%s"
+  platform_credential = %s
+  platform_principal  = %s
 }
 `, name, platform.Name, platform.Credential, platform.Principal)
 }
@@ -450,7 +433,7 @@ func testAccAwsSnsPlatformApplicationConfig_basicAttribute(name string, platform
 resource "aws_sns_platform_application" "test" {
   name                = "%s"
   platform            = "%s"
-  platform_credential = "%s"
+  platform_credential = %s
   %s                  = "%s"
 }
 `, name, platform.Name, platform.Credential, attributeKey, attributeValue)
@@ -459,8 +442,8 @@ resource "aws_sns_platform_application" "test" {
 resource "aws_sns_platform_application" "test" {
   name                = "%s"
   platform            = "%s"
-  platform_credential = "%s"
-  platform_principal  = "%s"
+  platform_credential = %s
+  platform_principal  = %s
   %s                  = "%s"
 }
 `, name, platform.Name, platform.Credential, platform.Principal, attributeKey, attributeValue)
@@ -489,6 +472,7 @@ resource "aws_iam_role_policy_attachment" "test" {
 }
 
 %s
+
 `, iamRoleName, testAccAwsSnsPlatformApplicationConfig_basicAttribute(name, platform, attributeKey, "${aws_iam_role.test.arn}"))
 }
 
@@ -499,5 +483,6 @@ resource "aws_sns_topic" "test" {
 }
 
 %s
+
 `, snsTopicName, testAccAwsSnsPlatformApplicationConfig_basicAttribute(name, platform, attributeKey, "${aws_sns_topic.test.arn}"))
 }

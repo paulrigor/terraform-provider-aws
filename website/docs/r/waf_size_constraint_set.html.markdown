@@ -1,12 +1,12 @@
 ---
 layout: "aws"
-page_title: "AWS: waf_size_constraint_set"
+page_title: "AWS: aws_waf_size_constraint_set"
 sidebar_current: "docs-aws-resource-waf-size-constraint-set"
 description: |-
   Provides a AWS WAF Size Constraint Set resource.
 ---
 
-# aws_waf_size_constraint_set
+# Resource: aws_waf_size_constraint_set
 
 Provides a WAF Size Constraint Set Resource
 
@@ -65,10 +65,8 @@ The following arguments are supported:
   See [docs](http://docs.aws.amazon.com/waf/latest/APIReference/API_FieldToMatch.html)
   for all supported values.
 
-## Remarks
-
 ## Attributes Reference
 
-The following attributes are exported:
+In addition to all arguments above, the following attributes are exported:
 
 * `id` - The ID of the WAF Size Constraint Set.

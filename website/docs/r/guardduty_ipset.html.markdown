@@ -5,7 +5,7 @@ sidebar_current: docs-aws-resource-guardduty-ipset
 description: Provides a resource to manage a GuardDuty IPSet
 ---
 
-# aws_guardduty_ipset
+# Resource: aws_guardduty_ipset
 
 Provides a resource to manage a GuardDuty IPSet.
 
@@ -50,7 +50,7 @@ The following arguments are supported:
 
 ## Attributes Reference
 
-The following additional attributes are exported:
+In addition to all arguments above, the following attributes are exported:
 
 * `id` - The ID of the GuardDuty IPSet.
 

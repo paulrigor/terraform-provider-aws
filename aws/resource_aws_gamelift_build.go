@@ -1,6 +1,7 @@
 package aws
 
 import (
+	"fmt"
 	"log"
 	"time"
 
@@ -25,10 +26,13 @@ func resourceAwsGameliftBuild() *schema.Resource {
 				ValidateFunc: validation.StringLenBetween(1, 1024),
 			},
 			"operating_system": {
-				Type:         schema.TypeString,
-				Required:     true,
-				ForceNew:     true,
-				ValidateFunc: validateGameliftOperatingSystem,
+				Type:     schema.TypeString,
+				Required: true,
+				ForceNew: true,
+				ValidateFunc: validation.StringInSlice([]string{
+					gamelift.OperatingSystemAmazonLinux,
+					gamelift.OperatingSystemWindows2012,
+				}, false),
 			},
 			"storage_location": {
 				Type:     schema.TypeList,
@@ -90,8 +94,11 @@ func resourceAwsGameliftBuildCreate(d *schema.ResourceData, meta interface{}) er
 		}
 		return nil
 	})
+	if isResourceTimeoutError(err) {
+		out, err = conn.CreateBuild(&input)
+	}
 	if err != nil {
-		return err
+		return fmt.Errorf("Error creating Gamelift build client: %s", err)
 	}
 
 	d.SetId(*out.Build.BuildId)
@@ -170,11 +177,7 @@ func resourceAwsGameliftBuildDelete(d *schema.ResourceData, meta interface{}) er
 	_, err := conn.DeleteBuild(&gamelift.DeleteBuildInput{
 		BuildId: aws.String(d.Id()),
 	})
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return err
 }
 
 func expandGameliftStorageLocation(cfg []interface{}) *gamelift.S3Location {

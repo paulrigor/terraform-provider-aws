@@ -6,7 +6,7 @@ description: |-
   Provides an OpsWorks PHP application layer resource.
 ---
 
-# aws_opsworks_php_app_layer
+# Resource: aws_opsworks_php_app_layer
 
 Provides an OpsWorks PHP application layer resource.
 
@@ -59,6 +59,6 @@ An `ebs_volume` block supports the following arguments:
 
 ## Attributes Reference
 
-The following attributes are exported:
+In addition to all arguments above, the following attributes are exported:
 
 * `id` - The id of the layer.

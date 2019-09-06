@@ -8,11 +8,11 @@ import (
 	"github.com/hashicorp/terraform/helper/resource"
 )
 
-func TestAccAwsSsmParameterDataSource_basic(t *testing.T) {
+func TestAccAWSSsmParameterDataSource_basic(t *testing.T) {
 	resourceName := "data.aws_ssm_parameter.test"
 	name := "test.parameter"
 
-	resource.Test(t, resource.TestCase{
+	resource.ParallelTest(t, resource.TestCase{
 		PreCheck: func() {
 			testAccPreCheck(t)
 		},
@@ -27,6 +27,7 @@ func TestAccAwsSsmParameterDataSource_basic(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "type", "String"),
 					resource.TestCheckResourceAttr(resourceName, "value", "TestValue"),
 					resource.TestCheckResourceAttr(resourceName, "with_decryption", "false"),
+					resource.TestCheckResourceAttrSet(resourceName, "version"),
 				),
 			},
 			{
@@ -44,11 +45,11 @@ func TestAccAwsSsmParameterDataSource_basic(t *testing.T) {
 	})
 }
 
-func TestAccAwsSsmParameterDataSource_fullPath(t *testing.T) {
+func TestAccAWSSsmParameterDataSource_fullPath(t *testing.T) {
 	resourceName := "data.aws_ssm_parameter.test"
 	name := "/path/parameter"
 
-	resource.Test(t, resource.TestCase{
+	resource.ParallelTest(t, resource.TestCase{
 		PreCheck: func() {
 			testAccPreCheck(t)
 		},
@@ -72,14 +73,14 @@ func TestAccAwsSsmParameterDataSource_fullPath(t *testing.T) {
 func testAccCheckAwsSsmParameterDataSourceConfig(name string, withDecryption string) string {
 	return fmt.Sprintf(`
 resource "aws_ssm_parameter" "test" {
-	name = "%s"
-	type = "String"
-	value = "TestValue"
+  name  = "%s"
+  type  = "String"
+  value = "TestValue"
 }
 
 data "aws_ssm_parameter" "test" {
-	name = "${aws_ssm_parameter.test.name}"
-	with_decryption = %s
+  name            = "${aws_ssm_parameter.test.name}"
+  with_decryption = %s
 }
 `, name, withDecryption)
 }

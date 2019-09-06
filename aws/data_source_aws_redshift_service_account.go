@@ -3,6 +3,7 @@ package aws
 import (
 	"fmt"
 
+	"github.com/aws/aws-sdk-go/aws/arn"
 	"github.com/hashicorp/terraform/helper/schema"
 )
 
@@ -12,6 +13,7 @@ var redshiftServiceAccountPerRegionMap = map[string]string{
 	"us-east-2":      "391106570357",
 	"us-west-1":      "262260360010",
 	"us-west-2":      "902366379725",
+	"ap-east-1":      "313564881002",
 	"ap-south-1":     "865932855811",
 	"ap-northeast-2": "760740231472",
 	"ap-southeast-1": "361669875840",
@@ -24,6 +26,8 @@ var redshiftServiceAccountPerRegionMap = map[string]string{
 	"eu-west-2":      "307160386991",
 	"eu-west-3":      "915173422425",
 	"sa-east-1":      "075028567923",
+	"us-gov-east-1":  "665727464434",
+	"us-gov-west-1":  "665727464434",
 }
 
 func dataSourceAwsRedshiftServiceAccount() *schema.Resource {
@@ -51,7 +55,14 @@ func dataSourceAwsRedshiftServiceAccountRead(d *schema.ResourceData, meta interf
 
 	if accid, ok := redshiftServiceAccountPerRegionMap[region]; ok {
 		d.SetId(accid)
-		d.Set("arn", iamArnString(meta.(*AWSClient).partition, accid, "user/logs"))
+		arn := arn.ARN{
+			Partition: meta.(*AWSClient).partition,
+			Service:   "iam",
+			AccountID: accid,
+			Resource:  "user/logs",
+		}.String()
+		d.Set("arn", arn)
+
 		return nil
 	}
 

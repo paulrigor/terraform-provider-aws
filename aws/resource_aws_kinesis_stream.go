@@ -25,6 +25,15 @@ func resourceAwsKinesisStream() *schema.Resource {
 			State: resourceAwsKinesisStreamImport,
 		},
 
+		SchemaVersion: 1,
+		StateUpgraders: []schema.StateUpgrader{
+			{
+				Type:    resourceAwsKinesisStreamResourceV0().CoreConfigSchema().ImpliedType(),
+				Upgrade: resourceAwsKinesisStreamStateUpgradeV0,
+				Version: 0,
+			},
+		},
+
 		Timeouts: &schema.ResourceTimeout{
 			Create: schema.DefaultTimeout(5 * time.Minute),
 			Update: schema.DefaultTimeout(120 * time.Minute),
@@ -44,17 +53,10 @@ func resourceAwsKinesisStream() *schema.Resource {
 			},
 
 			"retention_period": {
-				Type:     schema.TypeInt,
-				Optional: true,
-				Default:  24,
-				ValidateFunc: func(v interface{}, k string) (ws []string, errors []error) {
-					value := v.(int)
-					if value < 24 || value > 168 {
-						errors = append(errors, fmt.Errorf(
-							"%q must be between 24 and 168 hours", k))
-					}
-					return
-				},
+				Type:         schema.TypeInt,
+				Optional:     true,
+				Default:      24,
+				ValidateFunc: validation.IntBetween(24, 168),
 			},
 
 			"shard_level_metrics": {
@@ -64,16 +66,22 @@ func resourceAwsKinesisStream() *schema.Resource {
 				Set:      schema.HashString,
 			},
 
+			"enforce_consumer_deletion": {
+				Type:     schema.TypeBool,
+				Optional: true,
+				Default:  false,
+			},
+
 			"encryption_type": {
-				Type:         schema.TypeString,
-				Optional:     true,
-				Default:      "NONE",
-				ValidateFunc: validation.StringInSlice([]string{"NONE", "KMS"}, true),
+				Type:     schema.TypeString,
+				Optional: true,
+				Default:  "NONE",
+				ValidateFunc: validation.StringInSlice([]string{
+					kinesis.EncryptionTypeNone,
+					kinesis.EncryptionTypeKms,
+				}, true),
 				DiffSuppressFunc: func(k, old, new string, d *schema.ResourceData) bool {
-					if strings.ToLower(old) == strings.ToLower(new) {
-						return true
-					}
-					return false
+					return strings.EqualFold(old, new)
 				},
 			},
 
@@ -175,7 +183,7 @@ func resourceAwsKinesisStreamRead(d *schema.ResourceData, meta interface{}) erro
 				d.SetId("")
 				return nil
 			}
-			return fmt.Errorf("[WARN] Error reading Kinesis Stream: \"%s\", code: \"%s\"", awsErr.Message(), awsErr.Code())
+			return fmt.Errorf("Error reading Kinesis Stream: \"%s\", code: \"%s\"", awsErr.Message(), awsErr.Code())
 		}
 		return err
 
@@ -211,7 +219,8 @@ func resourceAwsKinesisStreamDelete(d *schema.ResourceData, meta interface{}) er
 	sn := d.Get("name").(string)
 
 	_, err := conn.DeleteStream(&kinesis.DeleteStreamInput{
-		StreamName: aws.String(sn),
+		StreamName:              aws.String(sn),
+		EnforceConsumerDeletion: aws.Bool(d.Get("enforce_consumer_deletion").(bool)),
 	})
 	if err != nil {
 		return err
@@ -233,7 +242,6 @@ func resourceAwsKinesisStreamDelete(d *schema.ResourceData, meta interface{}) er
 			sn, err)
 	}
 
-	d.SetId("")
 	return nil
 }
 
@@ -460,7 +468,12 @@ func readKinesisStreamState(conn *kinesis.Kinesis, sn string) (*kinesisStreamSta
 		state.openShards = append(state.openShards, flattenShards(openShards(page.StreamDescription.Shards))...)
 		state.closedShards = append(state.closedShards, flattenShards(closedShards(page.StreamDescription.Shards))...)
 		state.shardLevelMetrics = flattenKinesisShardLevelMetrics(page.StreamDescription.EnhancedMonitoring)
-		state.encryptionType = aws.StringValue(page.StreamDescription.EncryptionType)
+		// EncryptionType can be nil in certain APIs, e.g. AWS China
+		if page.StreamDescription.EncryptionType != nil {
+			state.encryptionType = aws.StringValue(page.StreamDescription.EncryptionType)
+		} else {
+			state.encryptionType = kinesis.EncryptionTypeNone
+		}
 		state.keyId = aws.StringValue(page.StreamDescription.KeyId)
 		return !last
 	})

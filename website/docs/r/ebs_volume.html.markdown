@@ -6,7 +6,7 @@ description: |-
   Provides an elastic block storage resource.
 ---
 
-# aws_ebs_volume
+# Resource: aws_ebs_volume
 
 Manages a single EBS volume.
 
@@ -14,15 +14,16 @@ Manages a single EBS volume.
 
 ```hcl
 resource "aws_ebs_volume" "example" {
-    availability_zone = "us-west-2a"
-    size = 40
-    tags {
-        Name = "HelloWorld"
-    }
+  availability_zone = "us-west-2a"
+  size              = 40
+
+  tags = {
+    Name = "HelloWorld"
+  }
 }
 ```
 
-~> **NOTE**: One of `size` or `snapshot_id` is required when specifying an EBS volume 
+~> **NOTE**: One of `size` or `snapshot_id` is required when specifying an EBS volume
 
 ## Argument Reference
 
@@ -41,7 +42,7 @@ The following arguments are supported:
 
 ## Attributes Reference
 
-The following attributes are exported:
+In addition to all arguments above, the following attributes are exported:
 
 * `id` - The volume ID (e.g. vol-59fcb34e).
 * `arn` - The volume ARN (e.g. arn:aws:ec2:us-east-1:0123456789012:volume/vol-59fcb34e).
@@ -49,8 +50,8 @@ The following attributes are exported:
 
 ## Import
 
-EBS Volumes can be imported using the `id`, e.g. 
+EBS Volumes can be imported using the `id`, e.g.
 
 ```
-$ terraform import aws_ebs_volume.data vol-049df61146c4d7901
+$ terraform import aws_ebs_volume.id vol-049df61146c4d7901
 ```

@@ -6,7 +6,7 @@ description: |-
   Provides a resource to create a DynamoDB Global Table
 ---
 
-# aws_dynamodb_global_table
+# Resource: aws_dynamodb_global_table
 
 Provides a resource to manage a DynamoDB Global Table. These are layered on top of existing DynamoDB Tables.
 
@@ -88,7 +88,7 @@ The following arguments are supported:
 
 ## Attributes Reference
 
-The following additional attributes are exported:
+In addition to all arguments above, the following attributes are exported:
 
 * `id` - The name of the DynamoDB Global Table
 * `arn` - The ARN of the DynamoDB Global Table

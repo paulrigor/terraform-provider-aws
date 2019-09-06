@@ -27,10 +27,11 @@ The following arguments are supported:
 
 ## Attributes Reference
 
-The following attributes are exported:
+In addition to all arguments above, the following attributes are exported:
 
 * `arn` - The ARN of the ECS Cluster
 * `status` - The status of the ECS Cluster
 * `pending_tasks_count` - The number of pending tasks for the ECS Cluster
 * `running_tasks_count` - The number of running tasks for the ECS Cluster
 * `registered_container_instances_count` - The number of registered container instances for the ECS Cluster
+* `setting` - The settings associated with the ECS Cluster.
